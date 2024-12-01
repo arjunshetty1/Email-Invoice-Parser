@@ -1,27 +1,37 @@
-const tesseract = require('tesseract.js')
-const pdfParse = require('pdf-parse')
+const tesseract = require("tesseract.js");
+const { createWorker } = tesseract;
 
 class OCRService {
-  async extractTextFromPDF(pdfBuffer) {
-    try {
-      const data = await pdfParse(pdfBuffer)
-      return data.text
-    } catch (error) {
-      console.error(`Error extracting text from PDF: ${error.message}`)
-      return ''
+  constructor() {
+    this.worker = null;
+  }
+
+  async initWorker() {
+    if (!this.worker) {
+      this.worker = await createWorker();
+      await this.worker.loadLanguage('eng');
+      await this.worker.initialize('eng');
     }
   }
 
-  async performOCR(imageBuffer) {
+  async performOCR(imagePath) {
     try {
-      const { data: { text } } = await tesseract.recognize(imageBuffer)
-      return text
+      await this.initWorker();
+      const { data: { text } } = await this.worker.recognize(imagePath);
+      return text;
     } catch (error) {
-      console.error(`Error performing OCR: ${error.message}`)
-      return ''
+      console.error(`Error performing OCR: ${error.message}`);
+      return "";
+    }
+  }
+
+  async terminate() {
+    if (this.worker) {
+      await this.worker.terminate();
+      this.worker = null;
     }
   }
 }
 
-module.exports = new OCRService()
+module.exports = new OCRService();
 

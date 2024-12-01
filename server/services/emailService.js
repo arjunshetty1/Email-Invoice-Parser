@@ -1,6 +1,8 @@
 const Imap = require('imap');
 const simpleParser = require('mailparser').simpleParser;
 const { Buffer } = require('buffer');
+const fs = require('fs');
+const path = require('path');
 
 const imapConfig = {
   user: process.env.EMAIL_USER,
@@ -8,8 +10,14 @@ const imapConfig = {
   host: process.env.EMAIL_HOST,
   port: parseInt(process.env.EMAIL_PORT),
   tls: true,
-  tlsOptions: { rejectUnauthorized: false } // Add this line to ignore certificate errors
+  tlsOptions: { rejectUnauthorized: false }
 };
+
+// Ensure uploads directory exists
+const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
 
 exports.fetchEmails = () => {
   return new Promise((resolve, reject) => {
@@ -46,14 +54,29 @@ exports.fetchEmails = () => {
               // Process attachments
               const processedAttachments = await Promise.all(
                 (parsed.attachments || []).map(async (attachment) => {
-                  return {
-                    filename: attachment.filename,
-                    contentType: attachment.contentType,
-                    size: attachment.size,
-                    content: attachment.content ? Buffer.from(attachment.content).toString('base64') : null
-                  };
+                  // Generate a unique filename to prevent overwriting
+                  const uniqueFilename = `${Date.now()}-${attachment.filename}`;
+                  const filepath = path.join(UPLOADS_DIR, uniqueFilename);
+
+                  // Write attachment to file
+                  try {
+                    await fs.promises.writeFile(filepath, attachment.content);
+
+                    return {
+                      filename: attachment.filename,
+                      contentType: attachment.contentType,
+                      size: attachment.size,
+                      filepath: uniqueFilename 
+                    };
+                    
+                  } catch (writeErr) {
+                    console.error('Error saving attachment:', writeErr);
+                    return null;
+                  }
+
+                 
                 })
-              );
+              ).then(attachments => attachments.filter(att => att !== null));
 
               emailData = {
                 ...parsed,
